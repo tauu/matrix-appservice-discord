@@ -91,6 +91,8 @@ class DiscordBridgeConfigBridge {
     public disableDiscordMentions: boolean;
     public disableDeletionForwarding: boolean;
     public enableSelfServiceBridging: boolean;
+    public enableBotServiceBridging: boolean;
+    public botMxid: string | null = null;
     public disablePortalBridging: boolean;
     public disableReadReceipts: boolean;
     public disableEveryoneMention: boolean = false;

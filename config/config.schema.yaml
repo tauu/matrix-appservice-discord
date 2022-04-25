@@ -24,6 +24,8 @@ properties:
             type: "boolean"
           enableSelfServiceBridging:
             type: "boolean"
+          enableBotServiceBridging:
+            type: "boolean"
           disableReadReceipts:
             type: "boolean"
           disableJoinLeaveNotifications:

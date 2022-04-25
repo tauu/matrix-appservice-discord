@@ -26,6 +26,7 @@ import { IRoomStoreEntry } from "./db/roomstore";
 import * as markdown from "marked";
 const log = new Log("MatrixCommandHandler");
 
+const PROVISIONING_ADMIN_POWER_LEVEL = 100;
 const PROVISIONING_DEFAULT_POWER_LEVEL = 50;
 const PROVISIONING_DEFAULT_USER_POWER_LEVEL = 0;
 const ROOM_CACHE_MAXAGE_MS = 15 * 60 * 1000;
@@ -112,6 +113,54 @@ export class MatrixCommandHandler {
                     }
                 },
             },
+            botbridge: {
+                description: "Bridges this room to a Discord channel - for the configured bot user only.",
+                /* eslint-disable prefer-template */
+                help: "How to configure another bot to bridge a Discord guild:\n" +
+                    "1. Invite the bot to your Discord guild using this link: " + Util.GetBotLink(this.config) + "\n" +
+                    "2. Invite me to the matrix room you'd like to bridge\n" +
+                    "3. Set botMxID to the bot user which may use this command\n" +
+                    "4. Int the matrix room, let the bot send the message `!discord botbridge <guild id> <channel id>`\n" +
+                    "5. Enjoy your new bridge!",
+                /* eslint-enable prefer-template */
+                params: ["guildId", "channelId"],
+                permission: {
+                    cat: "events",
+                    level: PROVISIONING_ADMIN_POWER_LEVEL,
+                    botService: true,
+                    selfService: false,
+                    subcat: "m.room.power_levels",
+                },
+                run: async ({ guildId, channelId }) => {
+                    if (roomEntry && roomEntry.remote) {
+                        return "This room is already bridged to a Discord guild.";
+                    }
+                    if (!guildId || !channelId) {
+                        return "Invalid syntax. For more information try `!discord help adminbridge`";
+                    }
+                    if (await this.provisioner.RoomCountLimitReached(this.config.limits.roomCount)) {
+                        log.info(`Room count limit (value: ${this.config.limits.roomCount}) reached: Rejecting command to bridge new matrix room ${event.room_id} to ${guildId}/${channelId}`);
+                        return `This bridge has reached its room limit of ${this.config.limits.roomCount}. Unbridge another room to allow for new connections.`;
+                    }
+                    try {
+                        const discordResult = await this.discord.LookupRoom(guildId, channelId);
+                        const channel = discordResult.channel as Discord.TextChannel;
+
+                        log.info(`Bridging matrix room ${event.room_id} to ${guildId}/${channelId}`);
+                        await this.provisioner.BridgeMatrixRoom(channel, event.room_id);
+                        return "I have bridged this room to your channel";
+                    } catch (err) {
+                        if (err.message === "Timed out waiting for a response from the Discord owners."
+                            || err.message === "The bridge has been declined by the Discord guild.") {
+                            return err.message;
+                        }
+
+                        log.error(`Error bridging ${event.room_id} to ${guildId}/${channelId}`);
+                        log.error(err);
+                        return "There was a problem bridging that channel - has the guild owner approved the bridge?";
+                    }
+                },
+            },
             unbridge: {
                 description: "Unbridges a Discord channel from this room",
                 params: [],
@@ -119,6 +168,38 @@ export class MatrixCommandHandler {
                     cat: "events",
                     level: PROVISIONING_DEFAULT_POWER_LEVEL,
                     selfService: true,
+                    subcat: "m.room.power_levels",
+                },
+                run: async () => {
+                    if (!roomEntry || !roomEntry.remote) {
+                        return "This room is not bridged.";
+                    }
+                    if (!roomEntry.remote.data.plumbed) {
+                        return "This room cannot be unbridged.";
+                    }
+                    const res = await this.discord.LookupRoom(
+                        roomEntry.remote.data.discord_guild!,
+                        roomEntry.remote.data.discord_channel!,
+                    );
+                    try {
+                        await this.provisioner.UnbridgeChannel(res.channel, event.room_id);
+                        return "This room has been unbridged";
+                    } catch (err) {
+                        log.error(`Error while unbridging room ${event.room_id}`);
+                        log.error(err);
+                        return "There was an error unbridging this room. " +
+                            "Please try again later or contact the bridge operator.";
+                    }
+                },
+            },
+            botunbridge: {
+                description: "Unbridges a Discord channel from this room - for the configured bot user only.",
+                params: [],
+                permission: {
+                    cat: "events",
+                    level: PROVISIONING_DEFAULT_POWER_LEVEL,
+                    botService: true,
+                    selfService: false,
                     subcat: "m.room.power_levels",
                 },
                 run: async () => {
@@ -177,6 +258,12 @@ export class MatrixCommandHandler {
         const permissionCheck: CommandPermissonCheck = async (permission) => {
             if (permission.selfService && !this.config.bridge.enableSelfServiceBridging) {
                 return "The owner of this bridge does not permit self-service bridging.";
+            }
+            if (permission.botService && !this.config.bridge.enableBotServiceBridging) {
+                return "The owner of this bridge does not permit bot-service bridging.";
+            }
+            if (permission.botService && event.sender != this.config.bridge.botMxid) {
+                return "Only the configred bot user may use the bot-service bridging commands.";
             }
             return await Util.CheckMatrixPermission(
                 this.bridge.botClient,

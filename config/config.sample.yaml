@@ -29,6 +29,11 @@ bridge:
   # Enable users to bridge rooms using !discord commands. See
   # https://t2bot.io/discord for instructions.
   enableSelfServiceBridging: false
+  # Enable a single bot user to bridge rooms using the !discord botbridge command.
+  # The matrix id of the user which may use the bot command is set in the option botMXID.
+  enableBotServiceBridging: false
+  # MXID of an bot user which can use the botbridge command. Optional, but required if enableBotServiceBridging is true.
+  botMxid: '@bot:localhost'
   # Disable sending of read receipts for Matrix events which have been
   # successfully bridged to Discord.
   disableReadReceipts: false
