@@ -26,3 +26,31 @@ jobs:
           node-version: ${{ matrix.node_version }}
       - run: yarn
       - run: yarn test
+
+  build-push-image:
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Docker Build
+        if: ${{ github.ref_name == 'develop' }}
+        run: |
+                docker build -f Dockerfile -t tauu/matrix-appservice-discord:latest .
+      - name: Docker Build
+        if: ${{ github.ref_type == 'tag' }}
+        run: |
+                docker build -f Dockerfile -t tauu/matrix-appservice-discord:${{github.ref_name}} .
+      - name: Docker Push
+        if: ${{ github.ref_name == 'main' }}
+        run: |
+                docker push tauu/matrix-appservice-discord:latest
+      - name: Docker Push
+        if: ${{ github.ref_type == 'tag' }}
+        run: |
+                docker push tauu/matrix-appservice-discordr:${{github.ref_name}}
