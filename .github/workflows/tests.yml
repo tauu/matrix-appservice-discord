@@ -47,7 +47,7 @@ jobs:
         run: |
                 docker build -f Dockerfile -t tauu/matrix-appservice-discord:${{github.ref_name}} .
       - name: Docker Push
-        if: ${{ github.ref_name == 'main' }}
+        if: ${{ github.ref_name == 'develop' }}
         run: |
                 docker push tauu/matrix-appservice-discord:latest
       - name: Docker Push
